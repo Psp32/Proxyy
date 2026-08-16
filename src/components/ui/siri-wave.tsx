@@ -14,6 +14,7 @@ const FLUID_DOTS_FRAGMENT = `
 precision highp float;
 uniform vec2 iResolution;
 uniform float iTime;
+uniform float uSpeaking;
 const float TAU = 6.28318530718;
 const int N = 6;
 const float SMOOTH_K = 0.08;
@@ -27,45 +28,14 @@ const float HUE_SPEED = 0.06;
 const float COLOR_K = 0.5;
 const float SAT = 0.01;
 const float HUE_SPAN = 0.667;
-const float MERGE_PERIOD = 6.0;
-const float STAGGER = 0.33;
-const float HOLD = 0.0;
-const float W = 4.6;
-const float L = 3.2;
-const float PIERCE = 0.12;
-const float RECOIL = 0.035;
-const float REC_LAG = 0.11;
-const float GATHER_PERIOD = 12.0;
-const float GATHER_START = 9.2;
-const float GATHER_HOLD = 0.8;
-const float GATHER_R = 0.008;
-const float GATHER_DIM = 0.85;
-const float GATHER_IN = 1.8;
-const float GATHER_IN_L = 7.5;
-const float BURST_W = 6.5;
-const float BURST_L = 4.0;
-const float CHARGE_T = 0.30;
-const float CHARGE_SHRK = 0.18;
-const float CHARGE_GLOW = 0.35;
-const float FLASH_GAIN = 1.2;
-const float FLASH_DECAY = 7.0;
 
 float hash11(float n) {
   return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
 
-float settleWL(float tau, float w, float l) {
-  if (tau <= 0.0) return 0.0;
-  return 1.0 - exp(-l * tau) * cos(w * tau);
-}
-
 float settle(float tau) {
-  return settleWL(tau, W, L);
-}
-
-float settleCrit(float tau, float l) {
   if (tau <= 0.0) return 0.0;
-  return 1.0 - exp(-l * tau) * (1.0 + l * tau);
+  return 1.0 - exp(-3.2 * tau) * cos(4.6 * tau);
 }
 
 float smin(float a, float b, float k) {
@@ -96,51 +66,54 @@ float dotSD(vec2 p, vec2 pos, float r, float t, float fi, float shapeDamp) {
 }
 
 vec3 scene(vec2 p, float t) {
-  float k = floor(t / MERGE_PERIOD);
-  float u = fract(t / MERGE_PERIOD);
-  float te = u * MERGE_PERIOD;
-  float tg = mod(t, GATHER_PERIOD);
-  float g = settleCrit((tg - GATHER_START) * GATHER_IN, GATHER_IN_L)
-    - settleWL(tg - GATHER_START - GATHER_HOLD, BURST_W, BURST_L);
+  float k = floor(t / 6.0);
+  float u = fract(t / 6.0);
+  float te = u * 6.0;
+  float tg = mod(t, 12.0);
+  float g = settle((tg - 9.2) * 1.8) - settle((tg - 9.2 - 0.8) * 6.5);
   float gC = clamp(g, 0.0, 1.0);
-  float tb = tg - (GATHER_START + GATHER_HOLD);
-  float charge = smoothstep(-CHARGE_T, 0.0, min(tb, 0.0)) * gC;
-  float flash = tb > 0.0 ? exp(-tb * FLASH_DECAY) : 0.0;
-  float gBright = mix(1.0, GATHER_DIM, gC) * (1.0 + CHARGE_GLOW * charge + FLASH_GAIN * flash);
   vec3 total3 = vec3(1e5);
   vec3 cAcc = vec3(0.0);
   float wAcc = 1e-6;
+  float speak = clamp(uSpeaking, 0.0, 1.0);
 
   for (int i = 0; i < N; i++) {
     float fi = float(i);
     float seed = hash11(fi);
     float ang = fi / float(N) * TAU + t * 0.35;
     vec2 dir = vec2(cos(ang), sin(ang));
+
     float R = 0.17 + 0.010 * sin(t * 1.0) + 0.007 * sin(t * 1.3 + seed * TAU);
     float pairId = mod(fi, 3.0);
     float moverLow = mod(k + pairId, 2.0);
     float isMover = (fi < 2.5) ? step(moverLow, 0.5) : step(0.5, moverLow);
-    float goStart = pairId * STAGGER;
-    float retStart = 3.0 * STAGGER + HOLD + pairId * STAGGER;
+    float goStart = pairId * 0.33;
+    float retStart = 3.0 * 0.33 + 0.0 + pairId * 0.33;
     float m = (settle(te - goStart) - settle(te - retStart)) * isMover;
-    float rec = (settle(te - goStart - REC_LAG) - settle(te - retStart - REC_LAG)) * (1.0 - isMover);
+    float rec = (settle(te - goStart - 0.11) - settle(te - retStart - 0.11)) * (1.0 - isMover);
     float rSelf = dotR(fi, seed, t);
     rSelf = mix(rSelf, 0.036, gC);
-    rSelf *= 1.0 - CHARGE_SHRK * charge;
     float fj = mod(fi + 3.0, 6.0);
     float rPart = dotR(fj, hash11(fj), t);
-    float deep = -(R + RECOIL) - PIERCE * rPart;
-    float radial = mix(R, deep, m) + RECOIL * rec;
-    radial = mix(radial, GATHER_R, g);
+    float deep = -(R + 0.035) - 0.12 * rPart;
+    float radial = mix(R, deep, m) + 0.035 * rec;
+    radial = mix(radial, 0.008, g);
     vec2 pos = radial * dir;
+
+    float activeSpread = mix(1.0, 0.08, speak);
+    pos *= activeSpread;
+    pos += dir * 0.18 * (1.0 - speak);
+
     float sdR = dotSD(p - SPECTRAL.r * dir, pos, rSelf, t, fi, 1.0 - gC);
     float sdG = dotSD(p - SPECTRAL.g * dir, pos, rSelf, t, fi, 1.0 - gC);
     float sdB = dotSD(p - SPECTRAL.b * dir, pos, rSelf, t, fi, 1.0 - gC);
+
     total3 = vec3(
       smin(total3.r, sdR, SMOOTH_K),
       smin(total3.g, sdG, SMOOTH_K),
       smin(total3.b, sdB, SMOOTH_K)
     );
+
     float hue = fract(fi / float(N) + t * HUE_SPEED) * HUE_SPAN;
     vec3 dotCol = mix(vec3(1.0), hue2rgb(hue), SAT);
     float w = exp(-sdG * COLOR_K);
@@ -151,7 +124,7 @@ vec3 scene(vec2 p, float t) {
   vec3 sd3 = max(total3, vec3(0.0)) + 1e-4;
   vec3 core3 = clamp(INTENSITY / pow(sd3, vec3(FALLOFF_P)), 0.0, 1.0);
   vec3 edge3 = 1.0 - smoothstep(vec3(FADE_START), vec3(FADE_END), sd3);
-  vec3 bright = core3 * edge3 * gBright;
+  vec3 bright = core3 * edge3 * mix(1.0, 0.8, speak);
   return bright * (cAcc / wAcc);
 }
 
@@ -159,7 +132,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec2 res = iResolution.xy;
   vec2 p = (2.0 * fragCoord - res) / min(res.x, res.y);
   float t = iTime;
-  p /= 1.0 + 0.03 * sin(t * 1.0);
+  float speak = clamp(uSpeaking, 0.0, 1.0);
+  p /= mix(1.0, 1.8, speak);
   vec3 col = scene(p, t);
   col *= 1.0 + 0.05 * sin(t * 1.0 + 1.0);
   col = pow(col, vec3(1.0 / 1.2));
@@ -279,6 +253,7 @@ interface SiriWaveProps {
   size?: number;
   className?: string;
   active?: boolean;
+  speaking?: boolean;
 }
 
 function compileShader(gl: WebGLRenderingContext, type: number, source: string) {
@@ -318,13 +293,20 @@ export function SiriWave({
   size = 360,
   className,
   active = false,
+  speaking = false,
 }: SiriWaveProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeRef = useRef(active);
+  const speakingRef = useRef(speaking);
+  const speakingValueRef = useRef(0);
 
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
+
+  useEffect(() => {
+    speakingRef.current = speaking;
+  }, [speaking]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -354,6 +336,7 @@ export function SiriWave({
 
     const uResolution = gl.getUniformLocation(program, "iResolution");
     const uTime = gl.getUniformLocation(program, "iTime");
+    const uSpeaking = gl.getUniformLocation(program, "uSpeaking");
 
     const renderScale = 0.75;
     canvas.width = Math.round(size * renderScale);
@@ -366,8 +349,15 @@ export function SiriWave({
     const frame = () => {
       const speed = activeRef.current ? 1.6 : 1.0;
       const t = ((performance.now() - start) / 1000) * speed;
+      const targetSpeaking = speakingRef.current ? 1 : 0;
+      speakingValueRef.current += (targetSpeaking - speakingValueRef.current) * 0.08;
+      const bob = speakingValueRef.current > 0.1 ? Math.sin(t * 6.5) * 8 : 0;
+      if (canvas.style) {
+        canvas.style.transform = speakingValueRef.current > 0.1 ? `translateY(${bob}px)` : "translateY(0px)";
+      }
       gl.uniform2f(uResolution, canvas.width, canvas.height);
       gl.uniform1f(uTime, t);
+      gl.uniform1f(uSpeaking, speakingValueRef.current);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       frameId = requestAnimationFrame(frame);
     };
@@ -387,7 +377,14 @@ export function SiriWave({
       width={size}
       height={size}
       className={cn("block rounded-full", className)}
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        display: "block",
+        borderRadius: "9999px",
+        transformOrigin: "center center",
+        willChange: "transform",
+      }}
       aria-hidden
     />
   );

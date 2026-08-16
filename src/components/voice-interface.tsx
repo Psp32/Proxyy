@@ -130,6 +130,7 @@ function VoiceSession({
             variant="fluid-dots"
             size={320}
             active={isActive}
+            speaking={agentState === "speaking"}
             className="shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
           />
         </button>
@@ -282,6 +283,7 @@ export function VoiceInterface() {
                 variant="fluid-dots"
                 size={320}
                 active={isConnecting}
+                speaking={false}
                 className="shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
               />
             </button>
