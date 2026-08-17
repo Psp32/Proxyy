@@ -11,7 +11,7 @@ import {
   useVoiceAssistant,
 } from "@livekit/components-react";
 import { ConnectionState } from "livekit-client";
-import { Keyboard, SendHorizontal, X } from "lucide-react";
+import { SendHorizontal, X } from "lucide-react";
 import { SiriWave } from "@/components/ui/siri-wave";
 import { cn } from "@/lib/utils";
 
@@ -313,30 +313,6 @@ export function VoiceInterface() {
           </LiveKitRoom>
         )}
       </main>
-
-      <footer className="relative z-10 flex items-center justify-center px-6 pb-10 pt-4">
-        <button
-          type="button"
-          onClick={async () => {
-            if (!connectionDetails) {
-              setShowTextInput(true);
-              await startSession();
-              return;
-            }
-            setShowTextInput((prev) => !prev);
-          }}
-          disabled={isConnecting}
-          aria-label={showTextInput ? "Hide text input" : "Show text input"}
-          className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-400 backdrop-blur-md transition-all",
-            !isConnecting && "hover:border-white/20 hover:bg-white/[0.08] hover:text-zinc-200",
-            showTextInput && "border-white/20 bg-white/[0.1] text-zinc-200",
-            isConnecting && "cursor-wait opacity-60",
-          )}
-        >
-          <Keyboard className="h-5 w-5" />
-        </button>
-      </footer>
     </div>
   );
 }
