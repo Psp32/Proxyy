@@ -14,28 +14,53 @@
 # next.js
 /.next/
 /out/
+/build/
 
-# production
-/build
+# python virtual env / local runtime
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# misc
-.DS_Store
-*.pem
+# generated / local caches
+knowledge/index/
+agent/knowledge/index/
+agent/.env.local
+.env
+.env.*
+!.env.example
 
-# debug
+# debug / logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files
-.env
-.env*.local
-agent/.env.local
-
-# knowledge index (generated)
-knowledge/index/
+# system / editor files
+.DS_Store
+Thumbs.db
+*.pem
+*.swp
+*.swo
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local project artifacts
+*.bin
+*.cache
+header.bin
+.vscode/
+
+# AI assistant config (auto-generated, not project code)
+AGENTS.md
+CLAUDE.md
+
+# test files (local only)
+agent/tests/
+
