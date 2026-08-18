@@ -13,6 +13,8 @@ import {
 import { ConnectionState } from "livekit-client";
 import { SendHorizontal, X } from "lucide-react";
 import { SiriWave } from "@/components/ui/siri-wave";
+import { AICanvas } from "@/components/ai-canvas";
+import type { VisualizationData } from "@/lib/canvas-types";
 import { cn } from "@/lib/utils";
 
 type ConnectionDetails = {
@@ -36,6 +38,7 @@ function VoiceSession({
   const { send, chatMessages, isSending } = useChat();
   const [message, setMessage] = useState("");
   const [citationSources, setCitationSources] = useState<Array<{ title: string; source_type: string; section?: string; url?: string; excerpt?: string }>>([]);
+  const [vizData, setVizData] = useState<VisualizationData | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +62,28 @@ function VoiceSession({
       }
     } catch {
       // ignore malformed citation payloads
+    }
+  });
+
+  useDataChannel("visualization", (msg) => {
+    const payload = msg.payload ? new TextDecoder().decode(msg.payload) : "";
+    if (!payload) return;
+
+    try {
+      const parsed = JSON.parse(payload) as {
+        type?: string;
+        title?: string;
+        nodes?: any[];
+        edges?: any[];
+        metadata?: any;
+      };
+      if (!parsed || parsed.type === "clear" || !parsed.nodes || parsed.nodes.length === 0) {
+        setVizData(null);
+      } else {
+        setVizData(parsed as VisualizationData);
+      }
+    } catch {
+      // ignore malformed visualization payloads
     }
   });
 
@@ -113,7 +138,18 @@ function VoiceSession({
     <>
       <RoomAudioRenderer />
 
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
+      <div className={cn(
+        "flex flex-1 flex-col items-center px-6 transition-all duration-500 ease-out",
+        vizData ? "justify-start pt-6" : "justify-center",
+      )}>
+        {/* AI Canvas — renders above the orb when visualization data is present */}
+        {vizData && (
+          <AICanvas
+            data={vizData}
+            onDismiss={() => setVizData(null)}
+          />
+        )}
+
         <button
           type="button"
           onClick={handleOrbClick}
@@ -124,11 +160,12 @@ function VoiceSession({
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]",
             isConnected && "cursor-pointer hover:scale-[1.02] active:scale-[0.98]",
             !isConnected && "cursor-wait opacity-80",
+            vizData && "mt-4",
           )}
         >
           <SiriWave
             variant="fluid-dots"
-            size={320}
+            size={vizData ? 200 : 320}
             active={isActive}
             speaking={agentState === "speaking"}
             className="shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
@@ -153,7 +190,7 @@ function VoiceSession({
                     <p className="mt-1 text-xs text-zinc-400">{source.section}</p>
                   )}
                   {source.excerpt && (
-                    <p className="mt-2 text-xs leading-relaxed text-zinc-300">“{source.excerpt}”</p>
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-300">&ldquo;{source.excerpt}&rdquo;</p>
                   )}
                   {source.url && (
                     <a
