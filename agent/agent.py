@@ -27,13 +27,16 @@ from livekit.agents import (
 try:
     from .knowledge import get_default_retriever
     from .knowledge.retriever import KnowledgeRetriever
+    from .knowledge.visualizer import publish_visualization
 except ImportError:
     try:
         from agent.knowledge import get_default_retriever
         from agent.knowledge.retriever import KnowledgeRetriever
+        from agent.knowledge.visualizer import publish_visualization
     except ImportError:
         from knowledge import get_default_retriever
         from knowledge.retriever import KnowledgeRetriever
+        from knowledge.visualizer import publish_visualization
 
 
 
@@ -128,6 +131,9 @@ class TwinAssistant(Agent):
 
 
         await self._retriever.publish_citations(self._room, query, hits)
+
+        # Publish visualization if the query benefits from a visual explanation
+        await publish_visualization(self._room, query, hits)
 
 
 
