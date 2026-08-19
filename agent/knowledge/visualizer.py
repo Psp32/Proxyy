@@ -71,26 +71,37 @@ def classify_viz_type(query: str) -> str | None:
 
     if len(lowered) < 3:
         return None
-    for pat in _SKIP_PATTERNS:
-        if re.search(pat, lowered):
-            return None
+
+    # Check for explicit drawing or visual canvas requests
+    is_visual_request = bool(
+        re.search(
+            r"\b(draw|sketch|visualize|diagram|flowchart|architecture|canvas|chart|map out|render|show me on screen|show on canvas|graph)\b",
+            lowered,
+        )
+    )
+
+    # Only skip if this is not an explicit request to draw/show/canvas
+    if not is_visual_request:
+        for pat in _SKIP_PATTERNS:
+            if re.search(pat, lowered):
+                return None
 
     # Check comparison
     for kw in ["compare", "vs", "versus", "difference between", "differences"]:
         if re.search(r"\b" + kw + r"\b", lowered):
             return "comparison"
 
-    # Check timeline
+    # Check timeline / evolution
     for kw in ["timeline", "evolved", "journey", "history", "progression", "over time", "chronolog"]:
         if re.search(r"\b" + kw + r"\b", lowered):
             return "timeline"
 
-    # Check workflow
-    for kw in ["workflow", "how does .* work", "process", "pipeline", "steps", "how it works", "lifecycle"]:
+    # Check workflow / pipeline / how it works
+    for kw in ["workflow", "how does .* work", "process", "pipeline", "steps", "how it works", "lifecycle", "flowchart"]:
         if re.search(r"\b" + kw + r"\b", lowered):
             return "workflow"
 
-    # Check skills
+    # Check skills / tech stack
     for kw in ["technologies", "skills", "tech stack", "languages", "frameworks", "tools", "what tech"]:
         if re.search(r"\b" + kw + r"\b", lowered):
             return "skill_graph"
@@ -104,6 +115,10 @@ def classify_viz_type(query: str) -> str | None:
     for kw in ["project", "projects", "what have you built", "what did you build", "portfolio", "built"]:
         if re.search(r"\b" + kw + r"\b", lowered):
             return "projects_overview"
+
+    # If the user explicitly requested a diagram/canvas/draw but no specific category matched, show projects overview
+    if is_visual_request:
+        return "projects_overview"
 
     return None
 
@@ -757,15 +772,53 @@ def build_visualization(query: str, hits: list[RetrievalHit]) -> dict[str, Any] 
         return None
 
 
+def format_canvas_context(viz_data: dict[str, Any] | None) -> str:
+    """Format active canvas state into a concise context block for the LLM."""
+    if not viz_data or viz_data.get("type") == "clear":
+        return "Interactive AI Canvas State: The canvas is currently cleared/idle."
+
+    title = viz_data.get("title", "Active Diagram")
+    viz_type = viz_data.get("type", "architecture")
+    nodes = viz_data.get("nodes", [])
+    node_summaries = []
+    for n in nodes:
+        label = n.get("label", "")
+        desc = n.get("description", "")
+        if desc:
+            node_summaries.append(f"  • {label}: {desc}")
+        elif label:
+            node_summaries.append(f"  • {label}")
+
+    nodes_text = "\n".join(node_summaries) if node_summaries else "Standard flow components"
+    edges = [
+        f"{e.get('from')} -> {e.get('to')} ({e.get('label', '')})"
+        for e in viz_data.get("edges", [])
+        if e.get("label")
+    ]
+    edges_text = "; ".join(edges[:5]) if edges else "Connected data pipeline"
+
+    return (
+        f"Active Canvas Diagram on User's Screen:\n"
+        f"- Diagram Title: {title}\n"
+        f"- Diagram Type: {viz_type}\n"
+        f"- Visible Nodes:\n{nodes_text}\n"
+        f"- Key Connections: {edges_text}\n"
+        f"- Guidance: This visual diagram has been rendered on the user's interactive AI canvas. "
+        f"You are fully aware of it. Refer directly to these nodes, connections, and technologies when explaining."
+    )
+
+
 async def publish_visualization(
     room: rtc.Room,
     query: str,
     hits: list[RetrievalHit],
-) -> None:
+    viz_data: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     if not hits or room.local_participant is None:
-        return
+        return None
 
-    viz_data = build_visualization(query, hits)
+    if viz_data is None:
+        viz_data = build_visualization(query, hits)
     payload = viz_data if viz_data is not None else {"type": "clear", "nodes": [], "edges": []}
 
     try:
@@ -780,3 +833,5 @@ async def publish_visualization(
             logger.info("Published canvas clear action for query: %s", query)
     except Exception:
         logger.exception("Failed to publish visualization payload")
+
+    return viz_data

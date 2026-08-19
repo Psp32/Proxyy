@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 from dotenv import load_dotenv
 
 from livekit import agents, rtc
@@ -22,21 +25,23 @@ from livekit.agents import (
 
 )
 
+from livekit.agents import APIConnectOptions
+
 
 
 try:
     from .knowledge import get_default_retriever
     from .knowledge.retriever import KnowledgeRetriever
-    from .knowledge.visualizer import publish_visualization
+    from .knowledge.visualizer import build_visualization, format_canvas_context, publish_visualization
 except ImportError:
     try:
         from agent.knowledge import get_default_retriever
         from agent.knowledge.retriever import KnowledgeRetriever
-        from agent.knowledge.visualizer import publish_visualization
+        from agent.knowledge.visualizer import build_visualization, format_canvas_context, publish_visualization
     except ImportError:
         from knowledge import get_default_retriever
         from knowledge.retriever import KnowledgeRetriever
-        from knowledge.visualizer import publish_visualization
+        from knowledge.visualizer import build_visualization, format_canvas_context, publish_visualization
 
 
 
@@ -55,7 +60,7 @@ RETRIEVER: KnowledgeRetriever = get_default_retriever()
 
 
 RAG_INSTRUCTIONS = """
-You are Prem's digital twin in a real-time voice conversation.
+You are Prem's digital twin in a real-time voice conversation with an interactive AI Canvas on the user's screen.
 
 Key Voice Principles:
 - Speak concisely: keep answers to 2-4 natural sentences (around 30-50 words). Never monologue or give walls of text.
@@ -65,19 +70,27 @@ Key Voice Principles:
 - Never use bullet points, lists, or structured document styling in speech.
 - Never use robotic transitions ("According to...", "Certainly!", "I'd be glad to help"). Jump straight into the answer.
 
+Interactive AI Canvas Alignment:
+- You are equipped with a live Interactive AI Canvas that automatically renders architecture diagrams, workflow pipelines, comparison charts, skill graphs, and project nodes on the user's screen.
+- When an active diagram is displayed (see "Active Canvas Diagram"), naturally acknowledge or refer to it (e.g. "I've pulled up the architecture diagram on your screen", "As you can see in the data flow on the canvas...", "I've mapped out the components for you").
+- If the user asks about the canvas ("what's on the canvas?", "explain this diagram", "can you draw/visualize X?"), speak with full confidence about the diagram rendered on screen and explain its components.
+- Your voice explanation must align with the nodes, technologies, and connections visible on the canvas.
+
 Handling Common Questions:
 - When asked about projects generally:
-  Briefly mention your main projects in 1-2 punchy sentences (e.g. "I've built a few main projects—Loopin, a real-time WebRTC video chat app; Voxel, an AI canvas converting sketches to 2D/3D models; and GrocerSpy, a grocery price comparison tool. I've also done a few side projects like an agent training pipeline. Any specific one you'd like to hear about?")
+  Briefly mention your main projects in 1-2 punchy sentences and reference the projects diagram on screen.
 - When asked about a specific project:
-  Explain what it does and the 1-2 key technologies behind it in 2-3 sentences.
+  Explain what it does and the 1-2 key technologies behind it in 2-3 sentences matching the architecture on screen.
 - When asked about open-source / PRs:
-  Mention 2-3 highlights briefly (e.g. "I've contributed to several open-source tools—like fixing resume export rendering in urCV.ai, improving error messages in Layr, and redesigning the Sustaina landing page.")
+  Mention 2-3 highlights briefly (e.g. urCV.ai, Layr, Sustaina).
 - When asked about skills or background:
   Summarize your core strengths conversationally in 2 short sentences.
+- When asked to draw / sketch / visualize:
+  Enthusiastically confirm you've mapped it out on the canvas and briefly walk through the main components.
 
 Grounding rules:
-- Strictly ground your answers in the retrieved context. Do not invent projects, numbers, or facts.
-- If you don't know something, say "I don't have that detail on hand."
+- Strictly ground your answers in the retrieved context and canvas details. Do not invent projects, numbers, or facts.
+- If you don't know something completely absent from both knowledge and canvas, say "I don't have that detail on hand."
 """
 
 
@@ -104,7 +117,7 @@ class TwinAssistant(Agent):
         if not query or not self._retriever.is_ready:
             return
 
-        hits = self._retriever.search(query, top_k=5)
+        hits = await asyncio.to_thread(self._retriever.search, query, top_k=5)
 
         if not hits:
 
@@ -113,33 +126,30 @@ class TwinAssistant(Agent):
 
 
         context = self._retriever.format_context(hits)
+        viz_data = build_visualization(query, hits)
+        canvas_context = format_canvas_context(viz_data)
 
         turn_ctx.add_message(
-
             role="assistant",
-
             content=(
-
                 f"{RAG_INSTRUCTIONS.strip()}\n\n"
-
+                f"{canvas_context}\n\n"
                 f"Retrieved knowledge for the user's question:\n{context}"
-
             ),
-
         )
-
-
 
         await self._retriever.publish_citations(self._room, query, hits)
 
-        # Publish visualization if the query benefits from a visual explanation
-        await publish_visualization(self._room, query, hits)
+        # Publish visualization to the frontend canvas
+        await publish_visualization(self._room, query, hits, viz_data=viz_data)
 
 
 
 
 
 server = AgentServer()
+
+
 
 
 
@@ -155,16 +165,29 @@ async def digital_twin_agent(ctx: JobContext) -> None:
 
     session = AgentSession(
 
-        stt=inference.STT(model="deepgram/nova-3", language="en"),
+        stt=inference.STT(
 
-        llm=inference.LLM(model="google/gemma-4-31b-it"),
+            model="deepgram/nova-3",
 
-        tts=inference.TTS(model="inworld/inworld-tts-2", voice="Ashley"),
+            language="en",
+
+            conn_options=APIConnectOptions(max_retry=1, retry_interval=1.0, timeout=5.0),
+
+        ),
+
+        llm=inference.LLM(
+            model="google/gemma-4-31b-it",
+        ),
+
+        tts=inference.TTS(
+            model="cartesia/sonic-2",
+            voice=os.environ.get("CARTESIA_VOICE_ID", ""),
+            conn_options=APIConnectOptions(max_retry=1, retry_interval=1.0, timeout=5.0),
+        ),
 
         turn_handling=TurnHandlingOptions(
-
             turn_detection=inference.TurnDetector(),
-
+            endpointing={"min_delay": 0.35},
         ),
 
     )
