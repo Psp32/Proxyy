@@ -338,7 +338,11 @@ export function VoiceInterface() {
             token={connectionDetails.token}
             serverUrl={connectionDetails.serverUrl}
             connect
-            audio
+            audio={{
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }}
             className="flex flex-1 flex-col"
             onDisconnected={endSession}
           >

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -117,6 +118,11 @@ class TwinAssistant(Agent):
         if not query or not self._retriever.is_ready:
             return
 
+        # Filter out isolated background noises, clicks, or single punctuation
+        cleaned_words = re.findall(r"\b\w+\b", query)
+        if not cleaned_words:
+            return
+
         hits = await asyncio.to_thread(self._retriever.search, query, top_k=5)
 
         if not hits:
@@ -187,7 +193,17 @@ async def digital_twin_agent(ctx: JobContext) -> None:
 
         turn_handling=TurnHandlingOptions(
             turn_detection=inference.TurnDetector(),
-            endpointing={"min_delay": 0.35},
+            endpointing={
+                "mode": "dynamic",
+                "min_delay": 0.4,
+                "max_delay": 1.2,
+            },
+            interruption={
+                "enabled": True,
+                "min_duration": 0.6,
+                "min_words": 2,
+                "resume_false_interruption": True,
+            },
         ),
 
     )
