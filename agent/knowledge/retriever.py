@@ -78,13 +78,7 @@ class KnowledgeRetriever:
             candidates = self._store.search(query, top_k=fetch_k, category=categories[0])
             return _diversity_dedup(candidates, top_k)
         else:
-            seen_ids: set[str] = set()
-            candidates: list[RetrievalHit] = []
-            for cat in categories:
-                for hit in self._store.search(query, top_k=fetch_k, category=cat):
-                    if hit.chunk.chunk_id not in seen_ids:
-                        seen_ids.add(hit.chunk.chunk_id)
-                        candidates.append(hit)
+            candidates = self._store.search(query, top_k=fetch_k)
             candidates.sort(key=_rank_chunk_score, reverse=True)
             return _diversity_dedup(candidates, top_k)
 
