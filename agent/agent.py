@@ -58,6 +58,9 @@ AGENT_NAME = "Prem's-proxy"
 
 RETRIEVER: KnowledgeRetriever = get_default_retriever()
 
+if not RETRIEVER.is_ready:
+    RETRIEVER.ingest_sources()
+
 
 
 RAG_INSTRUCTIONS = """

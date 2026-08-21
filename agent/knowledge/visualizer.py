@@ -433,7 +433,7 @@ def _build_proxy_architecture(hits: list[RetrievalHit]) -> dict[str, Any]:
     }
 
 
-def _build_projects_overview(hits: list[RetrievalHit]) -> dict[str, Any]:
+def _build_projects_overview(query: str, hits: list[RetrievalHit]) -> dict[str, Any]:
     src = [_extract_source_ref(h) for h in hits][:3]
 
     nodes = [

@@ -24,10 +24,23 @@ class KnowledgeStore:
 
     @property
     def chunk_count(self) -> int:
-        return self._collection.count()
+        try:
+            return self._collection.count()
+        except Exception:
+            try:
+                self._collection = self._client.get_or_create_collection(
+                    name=COLLECTION_NAME,
+                    metadata={"hnsw:space": "cosine"},
+                )
+                return self._collection.count()
+            except Exception:
+                return 0
 
     def reset(self) -> None:
-        self._client.delete_collection(COLLECTION_NAME)
+        try:
+            self._client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
         self._collection = self._client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},

@@ -11,7 +11,18 @@ from .store import KnowledgeStore
 
 logger = logging.getLogger("knowledge")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+def _find_project_root() -> Path:
+    current = Path(__file__).resolve().parent
+    for _ in range(5):
+        if (current / "knowledge" / "sources").exists():
+            return current
+        if current.parent == current:
+            break
+        current = current.parent
+    return Path(__file__).resolve().parents[2]
+
+
+PROJECT_ROOT = _find_project_root()
 SOURCES_DIR = PROJECT_ROOT / "knowledge" / "sources"
 INDEX_DIR = PROJECT_ROOT / "knowledge" / "index"
 CITATIONS_TOPIC = "citations"
@@ -32,7 +43,7 @@ class KnowledgeRetriever:
     def search(self, query: str, top_k: int = 5) -> list[RetrievalHit]:
         categories, source_id_hint = _classify_intent(query)
 
-        fetch_k = max(top_k * 4, 30)
+        fetch_k = max(top_k * 2, 12)
 
         if source_id_hint:
             # Named project query — retrieve the most informative chunks for this specific project
@@ -57,7 +68,7 @@ class KnowledgeRetriever:
 
         elif categories == ["projects"]:
             # Broad project query: return 3 main projects (Voxel, Loopin, GrocerSpy) + 1-2 side projects
-            proj_fetch_k = max(fetch_k, 60)
+            proj_fetch_k = 16
             main_candidates = self._store.search(
                 f"{query} Voxel Loopin GrocerSpy", top_k=proj_fetch_k, category="projects"
             )

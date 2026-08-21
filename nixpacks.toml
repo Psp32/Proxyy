@@ -1,0 +1,14 @@
+[providers]
+providers = ["python"]
+
+[phases.setup]
+nixPkgs = ["python310", "python310Packages.pip", "gcc", "git"]
+
+[phases.install]
+cmds = ["python3 -m pip install -r agent/requirements.txt"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "python3 agent/agent.py start"
